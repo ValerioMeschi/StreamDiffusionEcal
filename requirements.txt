@@ -1,0 +1,4 @@
+pillow
+flask
+opencv-python
+ndi-python
