@@ -11,7 +11,7 @@ conda create -n streamdiffusion python=3.10
 conda activate streamdiffusion
 ```
 
-### Avec Venv (Windows)
+#### Avec Venv (Windows)
 
 ```
 # Vérifier la version de python (3.10.*)
@@ -42,8 +42,8 @@ pip install huggingface-hub==0.29.1
 ### Fix l'import de HF-hub qui marche pas sur l'ancienne version de diffusers
 
 Aller dans les site-packages de l'environnement
-[YOUR ENV PATH]/lib/python3.10/site-packages/diffusers/utils/dynamic_modules_utils.py
-effacer l'import de _cached_download_
+[YOUR ENV PATH]/lib/python3.10/site-packages/diffusers/utils/dynamic*modules_utils.py
+effacer l'import de \_cached_download*
 
 ### Installer streamdiffusion and tensorRT
 
