@@ -13,6 +13,7 @@ import fire
 import NDIlib as ndi
 import numpy as np
 from flask import Flask, Response, request
+from collections import deque
 
 
 app = Flask(__name__)
@@ -21,7 +22,7 @@ from utils.viewer import receive_images
 from utils.wrapper import StreamDiffusionWrapper
 from streamdiffusion.image_utils import postprocess_image
 
-inputs = []
+inputs = deque(maxlen=10)
 top = 0
 left = 0
 
@@ -80,7 +81,7 @@ width: int = 512):
         return 0
 
     sources = []
-    while not len(sources) > 0:
+    while not event.is_set() and not sources:
         print('Looking for sources ...')
         ndi.find_wait_for_sources(ndi_find, 1000)
         sources = ndi.find_get_current_sources(ndi_find)
@@ -282,6 +283,7 @@ def image_generation_process(
     input_screen.join()
     print(f"fps: {fps}")
 
+
 def main(
     model_id_or_path: str = "Lykon/dreamshaper-8", #KBlueLeaf/kohaku-v2.1 Lykon/dreamshaper-8 dreamlike-art/dreamlike-photoreal-2.0
     lora_dict: Optional[Dict[str, float]] = None,
@@ -313,7 +315,7 @@ def main(
 
 
     #monitor_sender, monitor_receiver = ctx.Pipe()
-
+    # Check for FPS updates
 
     process1 = ctx.Process(
         target=image_generation_process,
