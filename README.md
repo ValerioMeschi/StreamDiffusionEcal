@@ -161,3 +161,41 @@ def main(
     ...
 ):
 ```
+
+## Autres paramètres par défaut à configurer avant le chargement du modèle :
+
+- prompt: Texte du prompt de base pour générer l'image.
+- negative_prompt: Prompt négatif pour exclure certains aspects indésirables.
+- width, height: Dimensions de l'image générée.
+- use_denoising_batch: Active le débruitage par batch.
+- seed: Valeur de seed pour la génération aléatoire (changer pour obtenir des variations).
+- cfg_type: Type de guidance (ex: "self" pour img2img, "none" pour txt2img).
+- guidance_scale: Facteur de guidance (CFG scale) ; pour img2img, typiquement entre 1.0 et 2.5.
+- delta: Multiplicateur du bruit résiduel virtuel.
+- do_add_noise: Active l'ajout de bruit pour les étapes de débruitage.
+- enable_similar_image_filter: Active le filtre pour éviter des images trop similaires.
+- similar_image_filter_threshold: Seuil du filtre (valeur entre 0 et 1).
+- similar_image_filter_max_skip_frame: Nombre maximum de frames à sauter avec le filtre.
+
+```python
+def main(
+    model_id_or_path: str = "Lykon/dreamshaper-8",  # Modèle SD1.5 (ex: "Lykon/dreamshaper-8")
+    lora_dict: Optional[Dict[str, float]] = None,   # Dictionnaire des LoRA avec leur échelle (optionnel)
+    prompt: str = "A portrait of a scary man, dark eyes, evil face, horror, scary, ancient, photography, victorian era, white hair",  # Prompt principal
+    negative_prompt: str = "low quality, bad quality, blurry, low resolution",  # Prompt négatif
+    frame_buffer_size: int = 1,  # Nombre d'images traitées en batch
+    width: int = 512,            # Largeur de l'image générée
+    height: int = 512,           # Hauteur de l'image générée
+    acceleration: Literal["none", "xformers", "tensorrt"] = "tensorrt",  # Méthode d'accélération
+    use_denoising_batch: bool = True,  # Active le débruitage par batch
+    seed: int = 1,             # Seed pour la génération (changer pour varier le résultat)
+    cfg_type: Literal["none", "full", "self", "initialize"] = "self",  # Type de guidance (ex: "self" pour img2img)
+    guidance_scale: float = 1.4,  # Facteur de guidance (CFG scale), typiquement entre 1.0 et 2.5 pour img2img
+    delta: float = .7,         # Multiplicateur du bruit résiduel virtuel
+    do_add_noise: bool = False,  # Active l'ajout de bruit pour le débruitage
+    enable_similar_image_filter: bool = True,  # Active le filtre d'images similaires
+    similar_image_filter_threshold: float = 0.99,  # Seuil du filtre similaire (entre 0 et 1)
+    similar_image_filter_max_skip_frame: float = 10,  # Nombre maximal de frames à sauter
+) -> None:
+    # ... le reste du code ...
+```

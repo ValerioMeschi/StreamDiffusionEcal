@@ -267,6 +267,7 @@ def image_generation_process(
                     dtype=stream.dtype
                 )
 
+
             # Check if there's a new prompt
             if not prompt_queue.empty():
                 newPrompt = prompt_queue.get(block=False)
