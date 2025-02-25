@@ -1,60 +1,61 @@
 import { Pane } from "tweakpane";
 
 document.addEventListener("DOMContentLoaded", () => {
-  const pane = new Pane();
+  const pane = new Pane({
+    title: "Parameters",
+    expanded: true,
+  });
 
   const params = {
     prompt: "",
     seed: 1, // Default seed
+    showInputFeed: true, // New switch to show/hide inputFeed
   };
 
   pane.addBinding(params, "prompt", { label: "Prompt" });
-
   pane.addBinding(params, "seed", {
     label: "Seed",
     min: 0,
     max: 999999,
     step: 1,
   });
+  pane.addBinding(params, "showInputFeed", {
+    label: "Input Feed",
+    view: "checkbox",
+  });
 
   const sendParams = async () => {
     const formData = new FormData();
 
+    // Always send seed
+    formData.append("seed", params.seed);
+
+    // Send prompt only if not empty
     if (params.prompt.trim()) {
-      // If prompt is not empty, send prompt and seed
       formData.append("prompt", params.prompt);
-      formData.append("seed", params.seed);
-
-      await fetch("/set_params", {
-        method: "POST",
-        body: formData,
-      });
-
-      params.prompt = "";
-      pane.refresh();
-    } else {
-      // If prompt is empty, send only the seed
-      formData.append("seed", params.seed);
-
-      await fetch("/set_seed", {
-        method: "POST",
-        body: formData,
-      });
     }
+
+    await fetch("/set_params", {
+      method: "POST",
+      body: formData,
+    });
+
+    params.prompt = "";
+    pane.refresh();
   };
 
-  pane.addButton({ title: "Send Parameters" }).on("click", sendParams);
+  pane.addButton({ title: "Send" }).on("click", sendParams);
 
-  // Send only seed updates separately on change
   pane.on("change", (ev) => {
     if (ev.target.key === "seed") {
-      const seedForm = new FormData();
-      seedForm.append("seed", params.seed);
-
-      fetch("/set_seed", {
-        method: "POST",
-        body: seedForm,
-      });
+      sendParams();
+    } else if (ev.target.key === "showInputFeed") {
+      const inputFeedEl = document.getElementById("inputFeed");
+      if (params.showInputFeed) {
+        inputFeedEl.style.display = "";
+      } else {
+        inputFeedEl.style.display = "none";
+      }
     }
   });
 });

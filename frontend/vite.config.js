@@ -7,7 +7,7 @@ export default defineConfig({
     proxy: {
       "/output_feed": API_URL,
       "/input_feed": API_URL,
-      "/prompt": {
+      "/set_params": {
         target: API_URL,
         changeOrigin: true,
         secure: false,

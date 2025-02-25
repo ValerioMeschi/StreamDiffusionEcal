@@ -152,6 +152,7 @@ def image_generation_process(
     similar_image_filter_max_skip_frame: float,
     prompt_queue : Queue,
     inputs_queue: Queue,
+    seed_queue: Queue,
 ) -> None:
     """
     Process for generating images based on a prompt using a specified model.
@@ -249,6 +250,24 @@ def image_generation_process(
             if not close_queue.empty(): # closing check
                 break
 
+            # Check if there's a new seed
+            if not seed_queue.empty():
+                new_seed = seed_queue.get(block=False)
+                print(f"Updating seed: {new_seed}")
+                seed = int(new_seed)  # Ensure it's an integer
+                # Create a new generator with the new seed
+                new_generator = torch.Generator(device=stream.device).manual_seed(seed)
+                # Update the generator in the diffusion stream
+                stream.stream.generator = new_generator
+                # Optionally reinitialize the initial noise using the new generator
+                stream.stream.init_noise = torch.randn(
+                    (stream.stream.batch_size, 4, stream.stream.latent_height, stream.stream.latent_width),
+                    generator=new_generator,
+                    device=stream.device,
+                    dtype=stream.dtype
+                )
+
+            # Check if there's a new prompt
             if not prompt_queue.empty():
                 newPrompt = prompt_queue.get(block=False)
                 stream.stream.update_prompt(newPrompt)
@@ -311,6 +330,7 @@ def main(
     inputs_queue = ctx.Queue()
     prompt_queue = ctx.Queue()
     fps_queue = ctx.Queue()
+    seed_queue = ctx.Queue()
     close_queue = Queue()
 
 
@@ -341,7 +361,8 @@ def main(
             similar_image_filter_threshold,
             similar_image_filter_max_skip_frame,
             prompt_queue,
-            inputs_queue
+            inputs_queue,
+            seed_queue
             ),
     )
     process1.start()
@@ -356,14 +377,32 @@ def main(
         """ Flask route for MJPEG video streaming. """
         return Response(stream_frames(inputs_queue), mimetype='multipart/x-mixed-replace; boundary=frame')
 
-    @app.route('/prompt', methods=['POST'])
-    def set_prompt():
-        if 'prompt' not in request.form:
-            return 'No prompt given', 400
-        prompt_queue.put(request.form["prompt"])
-        print(request.form["prompt"])
-        return b"new Prompt set", 200
+    # @app.route('/prompt', methods=['POST'])
+    # def set_prompt():
+    #     if 'prompt' not in request.form:
+    #         return 'No prompt given', 400
+    #     prompt_queue.put(request.form["prompt"])
+    #     print(request.form["prompt"])
+    #     return b"new Prompt set", 200
 
+    @app.route('/set_params', methods=['POST'])
+    def set_params():
+        """API to update prompt and seed dynamically."""
+        data = request.form.to_dict()
+
+        if "prompt" in data and data["prompt"].strip():
+            prompt_queue.put(data["prompt"])
+            print(f"New prompt: {data['prompt']}")
+
+        if "seed" in data:
+            try:
+                new_seed = int(data["seed"])  # Ensure it's an integer
+                seed_queue.put(new_seed)  # Send new seed to the queue
+                print(f"New seed: {new_seed}")
+            except ValueError:
+                return jsonify({"error": "Invalid seed value"}), 400
+
+        return b"Parameters updated", 200  # Simple byte response
 
 
     app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
