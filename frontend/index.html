@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stream Diffusion</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <h1>Stream Diffusion Viewer</h1>
+
+    <div class="feed-container">
+      <img id="outputFeed" src="/output_feed" alt="Generated Output" />
+      <img id="inputFeed" src="/input_feed" alt="Input Feed" />
+    </div>
+
+    <div class="prompt-container">
+      <h2>Change Prompt</h2>
+      <input type="text" id="promptInput" placeholder="Enter new prompt" />
+      <button id="sendPrompt">Send</button>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
