@@ -1,5 +1,5 @@
 :root {
-  font-family: 'IBM Plex Sans', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: "IBM Plex Sans", system-ui, Avenir, Helvetica, Arial, sans-serif;
   font-weight: 300;
 
   color: rgba(255, 255, 255, 0.87);
@@ -30,10 +30,14 @@ body {
   overflow: hidden;
 }
 
-h1,h2,h3,h4,h5,h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   font-weight: 400;
 }
-
 
 .feed-container {
   display: flex;
@@ -47,25 +51,4 @@ h1,h2,h3,h4,h5,h6 {
   width: 50%;
   height: 100%;
   object-fit: contain;
-}
-
-.prompt-container {
-  position:fixed;
-  bottom: 0;
-  width: 100%;
-  text-align: center;
-  padding: 1rem;
-  background: rgba(0, 0, 0, 0.8);
-}
-
-input {
-  padding: 0.5rem;
-  font-size: 1rem;
-}
-
-button {
-  padding: 0.5rem 1rem;
-  font-size: 1rem;
-  margin-left: 0.5rem;
-  cursor: pointer;
 }

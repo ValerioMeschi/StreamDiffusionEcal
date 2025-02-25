@@ -1,30 +1,60 @@
+import { Pane } from "tweakpane";
+
 document.addEventListener("DOMContentLoaded", () => {
-  const promptInput = document.getElementById("promptInput");
-  const sendPromptButton = document.getElementById("sendPrompt");
+  const pane = new Pane();
 
-  const sendPrompt = async () => {
-    const prompt = promptInput.value;
-    if (!prompt) {
-      return alert("Please enter a prompt!");
-    }
-
-    const formData = new FormData();
-    formData.append("prompt", prompt);
-
-    await fetch("/prompt", {
-      method: "POST",
-      body: formData,
-    });
-
-    promptInput.value = "";
+  const params = {
+    prompt: "",
+    seed: 1, // Default seed
   };
 
-  sendPromptButton.addEventListener("click", sendPrompt);
+  pane.addBinding(params, "prompt", { label: "Prompt" });
 
-  promptInput.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      sendPrompt();
+  pane.addBinding(params, "seed", {
+    label: "Seed",
+    min: 0,
+    max: 999999,
+    step: 1,
+  });
+
+  const sendParams = async () => {
+    const formData = new FormData();
+
+    if (params.prompt.trim()) {
+      // If prompt is not empty, send prompt and seed
+      formData.append("prompt", params.prompt);
+      formData.append("seed", params.seed);
+
+      await fetch("/set_params", {
+        method: "POST",
+        body: formData,
+      });
+
+      params.prompt = "";
+      pane.refresh();
+    } else {
+      // If prompt is empty, send only the seed
+      formData.append("seed", params.seed);
+
+      await fetch("/set_seed", {
+        method: "POST",
+        body: formData,
+      });
+    }
+  };
+
+  pane.addButton({ title: "Send Parameters" }).on("click", sendParams);
+
+  // Send only seed updates separately on change
+  pane.on("change", (ev) => {
+    if (ev.target.key === "seed") {
+      const seedForm = new FormData();
+      seedForm.append("seed", params.seed);
+
+      fetch("/set_seed", {
+        method: "POST",
+        body: seedForm,
+      });
     }
   });
 });
