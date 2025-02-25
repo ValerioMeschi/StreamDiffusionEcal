@@ -1,4 +1,8 @@
-# StreamDiffusion - Workshop ECAL
+# StreamDiffusion
+
+#### Workshop ECAL 2025
+
+#### Valerio Meschi - Matthieu Minguet
 
 ## Installation
 
@@ -41,7 +45,7 @@ pip install torch==2.1.0 torchvision==0.16.0 xformers --index-url https://downlo
 pip install numpy==1.26.4
 pip install transformers==4.49.0
 pip install huggingface-hub==0.29.1
-python setup.py develop easy_install streamdiffusion[tensorrt]
+python setup.py develop easy_install streamdiffusion[tensorrt] # Nécessaire pour l'étape suivante
 ```
 
 ### Fix l'import de HF-hub qui marche pas sur l'ancienne version de diffusers
@@ -90,23 +94,40 @@ http://127.0.0.1:5000/input_feed
 
 ### [POST] - Form Multipart - paramètre "prompt"
 
-http://127.0.0.1:5000/prompt
+http://127.0.0.1:5000/set_params
+
+**Request Type:** `POST`
+**Content-Type:** `multipart/form-data`
+
+#### Parameters:
+
+- `prompt` _(optional)_ - The text prompt for image generation.
+- `seed` _(required)_ - The seed for randomization (integer).
+
+#### Example (JavaScript):
 
 ```js
 const formData = new FormData();
 
+// Add prompt (optional)
 formData.append(
   "prompt",
   "A giant castle overlooking a gloomy lake, incredible quality, 4k, photography, unreal engine"
 );
 
-fetch("http://127.0.0.1:5000/prompt", {
+// Add seed (required)
+formData.append("seed", 12345);
+
+fetch("http://127.0.0.1:5000/set_params", {
   method: "POST",
   body: formData,
-});
+})
+  .then((response) => response.text())
+  .then((data) => console.log("Response:", data))
+  .catch((error) => console.error("Error:", error));
 ```
 
-## Frontend
+## Frontend Stream Diffusion Viewer
 
 Exemple de frontend qui utilise l'API.
 
@@ -116,4 +137,27 @@ Exemple de frontend qui utilise l'API.
 cd frontend
 npm i
 npm run dev
+```
+
+## Changer le Modèle
+
+Tous les modèles SD1.5 compatibles avec StableDiffusionPipeline de diffusers, disponibles sur Hugging Face, peuvent être utilisés avec TensorRT après optimisation.
+
+### 1. Trouver un Modèle Compatible
+
+Sur [Hugging Face](https://huggingface.co/), recherchez des modèles Stable Diffusion 1.5 compatibles avec diffusers et optimisés pour TensorRT en filtrant avec les tags sd-1.5, diffusers, et tensorrt.
+
+Exemple:
+https://huggingface.co/Lykon/dreamshaper-8
+
+### 2. Modifier le Modèle dans le Script
+
+Dans le fichier `main.py`, trouvez le paramètre `model_id_or_path` et remplacez-le par l'identifiant du modèle Hugging Face :
+
+```python
+def main(
+      model_id_or_path: str = "Lykon/dreamshaper-8", #KBlueLeaf/kohaku-v2.1 Lykon/dreamshaper-8 dreamlike-art/dreamlike-photoreal-2.0
+
+    ...
+):
 ```
