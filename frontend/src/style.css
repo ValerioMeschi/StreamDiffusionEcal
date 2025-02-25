@@ -49,3 +49,7 @@ h1 {
   height: 100%;
   object-fit: contain;
 }
+
+.dg.ac {
+  margin-right: 0 !important;
+}

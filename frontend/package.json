@@ -12,6 +12,6 @@
     "vite": "^6.2.0"
   },
   "dependencies": {
-    "tweakpane": "^4.0.5"
+    "dat.gui": "^0.7.9"
   }
 }

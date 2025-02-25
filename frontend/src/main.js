@@ -1,36 +1,24 @@
-import { Pane } from "tweakpane";
+import * as dat from "dat.gui";
 
 document.addEventListener("DOMContentLoaded", () => {
-  const pane = new Pane({
-    title: "Parameters",
-    expanded: true,
-  });
+  const gui = new dat.GUI({ width: 300 });
 
   const params = {
     prompt: "",
-    seed: 1, // Default seed
+    seed: 1,
     showInputFeed: true,
   };
 
-  pane.addBinding(params, "prompt", { label: "Prompt" });
-  pane.addBinding(params, "seed", {
-    label: "Seed",
-    min: 0,
-    max: 999999,
-    step: 1,
-  });
-  pane.addBinding(params, "showInputFeed", {
-    label: "Input Feed",
-    view: "checkbox",
-  });
+  const promptController = gui.add(params, "prompt").name("Prompt");
+  const seedController = gui.add(params, "seed", 0, 999999, 1).name("Seed");
+  const feedController = gui.add(params, "showInputFeed").name("Input Feed");
 
   const sendParams = async () => {
     const formData = new FormData();
 
-    // Always send seed
     formData.append("seed", params.seed);
+    console.log("Prompt:", params.prompt);
 
-    // Send prompt only if not empty
     if (params.prompt.trim()) {
       formData.append("prompt", params.prompt);
     }
@@ -41,21 +29,22 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     params.prompt = "";
-    pane.refresh();
+    promptController.updateDisplay();
   };
 
-  pane.addButton({ title: "Send" }).on("click", sendParams);
-
-  pane.on("change", (ev) => {
-    if (ev.target.key === "seed") {
-      sendParams();
-    } else if (ev.target.key === "showInputFeed") {
-      const inputFeedEl = document.getElementById("inputFeed");
-      if (params.showInputFeed) {
-        inputFeedEl.style.display = "";
-      } else {
-        inputFeedEl.style.display = "none";
-      }
-    }
+  seedController.onChange(() => {
+    sendParams();
   });
+
+  feedController.onChange(() => {
+    const inputFeedEl = document.getElementById("inputFeed");
+    inputFeedEl.style.display = params.showInputFeed ? "" : "none";
+  });
+
+  const promptInputElem = promptController.domElement.querySelector("input");
+  if (promptInputElem) {
+    promptInputElem.addEventListener("input", () => {
+      sendParams();
+    });
+  }
 });
