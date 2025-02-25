@@ -9,7 +9,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const params = {
     prompt: "",
     seed: 1, // Default seed
-    showInputFeed: true, // New switch to show/hide inputFeed
+    showInputFeed: true,
   };
 
   pane.addBinding(params, "prompt", { label: "Prompt" });
