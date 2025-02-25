@@ -22,6 +22,11 @@ python --version
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 
 python -m venv streamdiffusion-env
+
+# Si plusieurs version de Pythons installées
+py -3.10 -m venv streamdiffusion-env
+
+# Activer la venv à chaque ouverture du terminal
 streamdiffusion-env\Scripts\activate
 ```
 
@@ -30,20 +35,27 @@ streamdiffusion-env\Scripts\activate
 ```bash
 Set-ExecutionPolicy Bypass -Scope Process -Force # Windows
 
-pip install --upgrade pip
+python -m pip install --upgrade pip
 pip install cuda-python
 pip install torch==2.1.0 torchvision==0.16.0 xformers --index-url https://download.pytorch.org/whl/cu118
 pip install numpy==1.26.4
 pip install transformers==4.49.0
 pip install huggingface-hub==0.29.1
-
+python setup.py develop easy_install streamdiffusion[tensorrt]
 ```
 
 ### Fix l'import de HF-hub qui marche pas sur l'ancienne version de diffusers
 
 Aller dans les site-packages de l'environnement
-[YOUR ENV PATH]/lib/python3.10/site-packages/diffusers/utils/dynamic*modules_utils.py
-effacer l'import de \_cached_download*
+[YOUR ENV PATH]/lib/python3.10/site-packages/diffusers/utils/dynamic\*modules_utils.py
+[YOUR ENV PATH]\Lib\site-packages\diffusers-0.24.0-py3.10.egg\diffusers\utils\dynamic_modules_utils.py" # Windows
+
+effacer l'import de \_cached_download\*
+
+```python
+from huggingface_hub import HfFolder, cached_download, hf_hub_download, model_info # Before
+from huggingface_hub import HfFolder, hf_hub_download, model_info # After
+```
 
 ### Installer streamdiffusion and tensorRT
 
@@ -92,4 +104,16 @@ fetch("http://127.0.0.1:5000/prompt", {
   method: "POST",
   body: formData,
 });
+```
+
+## Frontend
+
+Exemple de frontend qui utilise l'API.
+
+```bash
+# Ouvrir une nouvelle fenêtre dans le terminal
+# Pas nécessaire d'être dans la venv
+cd frontend
+npm i
+npm run dev
 ```

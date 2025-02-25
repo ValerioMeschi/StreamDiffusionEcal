@@ -1,9 +1,7 @@
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+  font-family: 'IBM Plex Sans', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-weight: 300;
 
-  color-scheme: light dark;
   color: rgba(255, 255, 255, 0.87);
   background-color: #242424;
 
@@ -24,32 +22,36 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  width: 100%;
+  height: 100vh; /* Full viewport height */
   margin: 0;
-  width: 100vw;
-  height: 100vh;
-  overflow: hidden;
+  padding: 0;
   background-color: #242424;
+  overflow: hidden;
 }
 
-h1 {
-  text-align: center;
-  font-size: 2em;
-  margin-bottom: 0.5em;
+h1,h2,h3,h4,h5,h6 {
+  font-weight: 400;
 }
+
 
 .feed-container {
   display: flex;
-  width: 100vw;
-  height: 80vh; /* Adjust height to leave space for other elements */
+  flex-grow: 1; /* Fills available vertical space */
+  width: 100%;
+  height: 100%; /* Ensure it stretches */
+  overflow: hidden;
 }
 
 .feed-container img {
   width: 50%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .prompt-container {
+  position:fixed;
+  bottom: 0;
   width: 100%;
   text-align: center;
   padding: 1rem;

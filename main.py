@@ -57,16 +57,16 @@ def get_string_between_parentheses(s):
 
 def normalize(arr):
     """
-    Linear normalization
+    Normalisation linéaire vectorisée pour les canaux RGB,
+    en laissant inchangé le canal alpha.
     """
     arr = arr.astype('float')
-    # Do not touch the alpha channel
-    for i in range(3):
-        minval = arr[...,i].min()
-        maxval = arr[...,i].max()
-        if minval != maxval:
-            arr[...,i] -= minval
-            arr[...,i] *= (255.0/(maxval-minval))
+    rgb = arr[..., :3]
+    min_vals = rgb.min(axis=(0, 1), keepdims=True)
+    max_vals = rgb.max(axis=(0, 1), keepdims=True)
+    diff = np.where((max_vals - min_vals) == 0, 1, max_vals - min_vals)
+    rgb_normalized = (rgb - min_vals) * (255.0 / diff)
+    arr[..., :3] = rgb_normalized
     return arr
 
 def ndi_receiver(event: threading.Event,height: int = 512,
