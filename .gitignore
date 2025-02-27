@@ -206,3 +206,5 @@ __pycache__/
 
 models/RealESR*
 *.safetensors
+
+streamdiffusion-env
