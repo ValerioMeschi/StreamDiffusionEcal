@@ -279,22 +279,26 @@ def image_generation_process(
             start_time = time.time()
             sampled_inputs = []
 
-            for i in range(frame_buffer_size):
-                index = (len(inputs) // frame_buffer_size) * i
-                sampled_inputs.append(inputs[len(inputs) - index - 1])
-                inputs_queue.put(inputs[len(inputs) - index - 1])
-            input_batch = torch.cat(sampled_inputs)
-            inputs.clear()
-            output_images = stream.stream(
-                input_batch.to(device=stream.device, dtype=stream.dtype)
-            ).cpu()
-            if frame_buffer_size == 1:
-                output_images = [output_images]
-            for output_image in output_images:
-                queue.put(output_image, block=False)
+            if(queue.qsize() < 10):
+                for i in range(frame_buffer_size):
+                    index = (len(inputs) // frame_buffer_size) * i
+                    sampled_inputs.append(inputs[len(inputs) - index - 1])
+                    if(inputs_queue.qsize()< 10):
+                        inputs_queue.put(inputs[len(inputs) - index - 1])
+                input_batch = torch.cat(sampled_inputs)
+                inputs.clear()
+                output_images = stream.stream(
+                    input_batch.to(device=stream.device, dtype=stream.dtype)
+                ).cpu()
+                if frame_buffer_size == 1:
+                    output_images = [output_images]
+                for output_image in output_images:
+                    queue.put(output_image, block=False)
 
-            fps = 1 / (time.time() - start_time)
-            fps_queue.put(fps)
+                fps = 1 / (time.time() - start_time)
+                fps_queue.put(fps)
+            else:
+                print("more than 10 frames in queue")
         except KeyboardInterrupt:
             break
 
