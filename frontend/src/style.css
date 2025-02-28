@@ -18,7 +18,7 @@ body {
 body {
   display: flex;
   flex-direction: column;
-  width: 100%;
+  width: 100vw;
   height: 100vh; /* Full viewport height */
   background-color: #111113;
   overflow: hidden;
@@ -38,15 +38,15 @@ h1 {
 .feed-container {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
-  width: 100%;
-  height: 100%;
+  width: 100vw;
+  height: 100vh;
   overflow: hidden;
   gap: 1rem;
 }
 
 .feed-container img {
   width: 100%;
-  height: 100%;
+  height: inherit;
   object-fit: contain;
 }
 

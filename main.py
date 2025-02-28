@@ -112,12 +112,19 @@ width: int = 512):
         t, v, _, _ = ndi.recv_capture_v2(ndi_recv, 5000)
         if t == ndi.FRAME_TYPE_VIDEO:
             #print('Video data received (%dx%d).' % (v.xres, v.yres))
+            # Capture and normalize the frame
             frame = np.copy(v.data)
-            pil_image = Image.fromarray(normalize(frame).astype('uint8'),'RGBA')
+            norm_frame = normalize(frame).astype('uint8')
+
+            # Swap channels from BGRA to RGBA
+            norm_frame = norm_frame[..., [2, 1, 0, 3]]
+
+            # Now convert to a PIL image
+            pil_image = Image.fromarray(norm_frame, 'RGBA')
             rgb = pil_image.convert("RGB")
-            #cv.imshow('ndi image', frame)
-            #pil_image.show()
-            pil_image.resize((height, width))
+
+            # Resize and process further as needed
+            pil_image = pil_image.resize((height, width))
             inputs.append(pil2tensor(rgb))
             ndi.recv_free_video_v2(ndi_recv, v)
 

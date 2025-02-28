@@ -1,6 +1,6 @@
 import { defineConfig } from "vite";
 
-const API_URL = "http://localhost:5000"; // changer en fonction de l'API
+const API_URL = "http://127.0.0.1:5000"; // changer en fonction de l'API
 
 export default defineConfig({
   server: {
