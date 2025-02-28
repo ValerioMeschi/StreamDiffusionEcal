@@ -135,7 +135,6 @@ width: int = 512):
     return 0
 
 
-
 def image_generation_process(
     queue: Queue,
     fps_queue: Queue,
