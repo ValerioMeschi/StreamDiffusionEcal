@@ -2,48 +2,91 @@ import os
 import sys
 import time
 import threading
-from multiprocessing import Process, Queue, get_context
+from multiprocessing import Process, Queue, get_context, shared_memory
 from multiprocessing.connection import Connection
 from typing import List, Literal, Dict, Optional
 import torch
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont, ImageTk
 import io
+
+from transformers.image_transforms import NumpyToTensor
 from streamdiffusion.image_utils import pil2tensor
 import fire
 import NDIlib as ndi
 import numpy as np
 from flask import Flask, Response, request
+from flask_socketio import SocketIO
+import base64
 from collections import deque
+import tkinter as tk
+import cv2
 
 
 app = Flask(__name__)
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 from utils.viewer import receive_images
 from utils.wrapper import StreamDiffusionWrapper
 from streamdiffusion.image_utils import postprocess_image
 
-inputs = deque(maxlen=10)
 top = 0
 left = 0
+use_ndi = False
+
+frame_shape = (512, 512, 3)
+frame_dtype = np.uint8
+
+sleep_time = 0.01
+
+
+def tensor_to_rgb(tensor):
+    # Convert to numpy and transpose dimensions to [H, W, C]
+    rgb = tensor.detach().cpu().numpy()
+    rgb = np.transpose(rgb, (1, 2, 0))
+
+    # If values are in [0, 1], convert to [0, 255]
+    if rgb.max() <= 1.0:
+        rgb = (rgb * 255).astype(np.uint8)
+
+    return rgb
+
+def write_text_to_image(image, text):
+    draw = ImageDraw.Draw(image)
+    font = ImageFont.load_default()
+    w, h = image.size
+    bbox = draw.textbbox((0, 0), text, font=font)
+    draw.text(((w-bbox[2])/2, (h-bbox[3])/2), text, font=font, fill='white')
+    return image
+
+
+# Empty image for no signal
+empty_image = write_text_to_image(Image.new('RGB', (512, 512), color='black'), "no signal")
+empty_io = io.BytesIO()
+empty_image.save(empty_io, format="JPEG")
+empty_io.seek(0)
+empty_bytes = empty_io.read()
 
 # methodes pour streamer les frame en sortie. A threader dans main
-def stream_frames(queue, convert=True):
+def stream_frames(shared_name, convert=True):
     """ Continuously yields frames from the queue for MJPEG streaming. """
+    shm = shared_memory.SharedMemory(name=shared_name)
+    shared_frame = np.ndarray(frame_shape, dtype=frame_dtype, buffer=shm.buf)
     while True:
-        if not queue.empty():
-            # convertir les images reçues dans la quue en byte array pour MJPEG
+        frame = shared_frame.copy()  # Make a copy if needed
+        pImage = Image.fromarray(frame)
+        img_io = io.BytesIO()
+        pImage.save(img_io, format="JPEG")
+        img_io.seek(0)
+        img_bytes = img_io.read()
+        yield (b'--frame\r\n'
+                b'Content-Type: image/jpeg\r\n\r\n' + img_bytes + b'\r\n')
 
-            if convert:
-                pImage = postprocess_image(queue.get(block=False), output_type="pil")[0]
-            else:
-                pImage = queue.get(block=False)
-            img_io = io.BytesIO()
-            pImage.save(img_io, format="JPEG")
-            img_io.seek(0)
-            img_bytes = img_io.read()
+        time.sleep(sleep_time)
 
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + img_bytes + b'\r\n')
+
+
+
+
 
 
 import re
@@ -69,9 +112,11 @@ def normalize(arr):
     arr[..., :3] = rgb_normalized
     return arr
 
-def ndi_receiver(event: threading.Event,height: int = 512,
-width: int = 512):
-    global inputs
+def ndi_receiver(height: int,
+width: int, shared_frame_name):
+
+    print("Starting NDI receiver thread...")
+
     if not ndi.initialize():
         return 0
 
@@ -81,7 +126,7 @@ width: int = 512):
         return 0
 
     sources = []
-    while not event.is_set() and not sources:
+    while not sources:
         print('Looking for sources ...')
         ndi.find_wait_for_sources(ndi_find, 1000)
         sources = ndi.find_get_current_sources(ndi_find)
@@ -105,33 +150,22 @@ width: int = 512):
     ndi.find_destroy(ndi_find)
     #cv.startWindowThread()
 
+    shm = shared_memory.SharedMemory(name=shared_frame_name)
+    shared_frame = np.ndarray(frame_shape, dtype=frame_dtype, buffer=shm.buf)
     while True:
-        if event.is_set():
-            print("terminate read thread")
+        try:
+            t, v, _, _ = ndi.recv_capture_v2(ndi_recv, 5000)
+            if t == ndi.FRAME_TYPE_VIDEO:
+                frame = np.copy(v.data)
+                frame = frame[...,:3]
+                norm_frame = normalize(frame).astype('uint8')
+                shared_frame[:] = norm_frame[:]
+                ndi.recv_free_video_v2(ndi_recv, v)
+                time.sleep(sleep_time)
+        except KeyboardInterrupt:
+            ndi.recv_destroy(ndi_recv)
+            ndi.destroy()
             break
-        t, v, _, _ = ndi.recv_capture_v2(ndi_recv, 5000)
-        if t == ndi.FRAME_TYPE_VIDEO:
-            #print('Video data received (%dx%d).' % (v.xres, v.yres))
-            # Capture and normalize the frame
-            frame = np.copy(v.data)
-            norm_frame = normalize(frame).astype('uint8')
-
-            # Swap channels from BGRA to RGBA
-            norm_frame = norm_frame[..., [2, 1, 0, 3]]
-
-            # Now convert to a PIL image
-            pil_image = Image.fromarray(norm_frame, 'RGBA')
-            rgb = pil_image.convert("RGB")
-
-            # Resize and process further as needed
-            pil_image = pil_image.resize((height, width))
-            inputs.append(pil2tensor(rgb))
-            ndi.recv_free_video_v2(ndi_recv, v)
-
-    ndi.recv_destroy(ndi_recv)
-    ndi.destroy()
-    #cv.destroyAllWindows()
-
     return 0
 
 
@@ -159,6 +193,8 @@ def image_generation_process(
     prompt_queue : Queue,
     inputs_queue: Queue,
     seed_queue: Queue,
+    shared_input_frame_name: str,
+    shared_output_frame_name: str,
 ) -> None:
     """
     Process for generating images based on a prompt using a specified model.
@@ -212,8 +248,9 @@ def image_generation_process(
         The max skip frame for similar image filter, by default 10.
     """
 
-    global inputs
     global app
+
+    print("Starting image generation thread..")
 
     stream = StreamDiffusionWrapper(
         model_id_or_path=model_id_or_path,
@@ -242,14 +279,17 @@ def image_generation_process(
         delta=delta,
     )
 
-    #monitor = monitor_receiver.recv()
-
     event = threading.Event()
 
+    #start NDI thread if enabled
 
-    input_screen = threading.Thread(target=ndi_receiver, args=(event, height, width))
-    input_screen.start()
-    time.sleep(5)
+    shmIn = shared_memory.SharedMemory(name=shared_input_frame_name)
+    shared_input_frame = np.ndarray(frame_shape, dtype=frame_dtype, buffer=shmIn.buf)
+
+    shmOut = shared_memory.SharedMemory(name=shared_output_frame_name)
+    shared_output_frame = np.ndarray(frame_shape, dtype=frame_dtype, buffer=shmOut.buf)
+
+    time.sleep(2)
 
     while True:
         try:
@@ -266,12 +306,14 @@ def image_generation_process(
                 # Update the generator in the diffusion stream
                 stream.stream.generator = new_generator
                 # Optionally reinitialize the initial noise using the new generator
+                '''
                 stream.stream.init_noise = torch.randn(
                     (stream.stream.batch_size, 4, stream.stream.latent_height, stream.stream.latent_width),
                     generator=new_generator,
                     device=stream.device,
                     dtype=stream.dtype
                 )
+                '''
 
 
             # Check if there's a new prompt
@@ -279,39 +321,27 @@ def image_generation_process(
                 newPrompt = prompt_queue.get(block=False)
                 stream.stream.update_prompt(newPrompt)
 
-            if len(inputs) < frame_buffer_size:
-                time.sleep(0.005)
-                continue
-            start_time = time.time()
-            sampled_inputs = []
+            # Check for new frames to process
+            new_frame = shared_input_frame.copy()
+            #pil_image = Image.fromarray(new_frame, 'RGB')
+            tensor = torch.as_tensor(new_frame).permute(2, 0, 1)
+            tensor = tensor.float() / 255.0
+            input_batch = torch.cat([tensor])
+            output_image = stream.stream(input_batch.to(device=stream.device, dtype=stream.dtype)).cpu()
+            queue.put(output_image, block=False)
 
-            if(queue.qsize() < 10):
-                for i in range(frame_buffer_size):
-                    index = (len(inputs) // frame_buffer_size) * i
-                    sampled_inputs.append(inputs[len(inputs) - index - 1])
-                    if(inputs_queue.qsize()< 10):
-                        inputs_queue.put(inputs[len(inputs) - index - 1])
-                input_batch = torch.cat(sampled_inputs)
-                inputs.clear()
-                output_images = stream.stream(
-                    input_batch.to(device=stream.device, dtype=stream.dtype)
-                ).cpu()
-                if frame_buffer_size == 1:
-                    output_images = [output_images]
-                for output_image in output_images:
-                    queue.put(output_image, block=False)
+            pp = postprocess_image(output_image, output_type="pt")[0]
+            out_frame = tensor_to_rgb(pp);
 
-                fps = 1 / (time.time() - start_time)
-                fps_queue.put(fps)
-            else:
-                print("more than 10 frames in queue")
+            shared_output_frame[:] = out_frame[:]
+            #out_frame = out_frame.astype('uint8')
+            #print(out_frame.shape)
+
+            time.sleep(sleep_time)
         except KeyboardInterrupt:
             break
 
     print("closing image_generation_process...")
-    event.set() # stop capture thread
-    input_screen.join()
-    print(f"fps: {fps}")
 
 
 def main(
@@ -327,7 +357,7 @@ def main(
     seed: int = 1,
     cfg_type: Literal["none", "full", "self", "initialize"] = "self",
     guidance_scale: float = 1.4,
-    delta: float = .7,
+    delta: float = 1,
     do_add_noise: bool = False,
     enable_similar_image_filter: bool = True,
     similar_image_filter_threshold: float = 0.99,
@@ -344,11 +374,12 @@ def main(
     seed_queue = ctx.Queue()
     close_queue = Queue()
 
+    in_frame = np.zeros(frame_shape, dtype=frame_dtype)
+    shared_input_frame = shared_memory.SharedMemory(create=True, size=in_frame.nbytes)
+    shared_output_frame = shared_memory.SharedMemory(create=True, size=in_frame.nbytes)
 
-    #monitor_sender, monitor_receiver = ctx.Pipe()
-    # Check for FPS updates
 
-    process1 = ctx.Process(
+    p1 = ctx.Process(
         target=image_generation_process,
         args=(
             queue,
@@ -373,28 +404,48 @@ def main(
             similar_image_filter_max_skip_frame,
             prompt_queue,
             inputs_queue,
-            seed_queue
+            seed_queue,
+            shared_input_frame.name,
+            shared_output_frame.name,
             ),
     )
-    process1.start()
+    p1.start()
+
+    #start NDI Process
+    p2 = ctx.Process(target=ndi_receiver, args=(512,512,shared_input_frame.name))
+    p2.start();
+
+    @socketio.on('message')
+    def handle_image(data):
+        if data.startswith('data:image'):
+            base64_data = data.split(',')[1]
+            image_data = base64.b64decode(base64_data)
+            image = Image.open(io.BytesIO(image_data))
+            rgb = image.convert("RGB")
+            incoming_queue.put(pil2tensor(rgb))
+            print("received")
 
     @app.route('/output_feed')
     def output_feed():
         """ Flask route for MJPEG video streaming. """
-        return Response(stream_frames(queue), mimetype='multipart/x-mixed-replace; boundary=frame')
+        return Response(stream_frames(shared_output_frame.name), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+    @app.route("/upload", methods=['POST'])
+    def output_img():
+        image_file = request.files['image']  # Get image from request
+        if image_file:
+            image = Image.open(image_file)  # Convert to PIL Image
+            image = image.convert("RGB")
+            image = image.resize((512, 512))
+            incoming_queue.put(pil2tensor(image))
+            return {"status": "success"}
+        else:
+            return {"status": "error", "message": "No image received"}
 
     @app.route('/input_feed')
     def input_feed():
         """ Flask route for MJPEG video streaming. """
         return Response(stream_frames(inputs_queue), mimetype='multipart/x-mixed-replace; boundary=frame')
-
-    # @app.route('/prompt', methods=['POST'])
-    # def set_prompt():
-    #     if 'prompt' not in request.form:
-    #         return 'No prompt given', 400
-    #     prompt_queue.put(request.form["prompt"])
-    #     print(request.form["prompt"])
-    #     return b"new Prompt set", 200
 
     @app.route('/set_params', methods=['POST'])
     def set_params():
@@ -418,35 +469,26 @@ def main(
 
     app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
 
-    '''
-    monitor_process = ctx.Process(
-        target=monitor_setting_process,
-        args=(
-            width,
-            height,
-            monitor_sender,
-            ),
-    )
-    monitor_process.start()
-    monitor_process.join()
-    '''
-
-    #process2 = ctx.Process(target=receive_images, args=(queue, fps_queue))
-    #process2.start()
-
-
-
     # terminate
     #process2.join()
     print("process2 terminated.")
     close_queue.put(True)
     print("process1 terminating...")
-    process1.join(5) # with timeout
-    if process1.is_alive():
-        print("process1 still alive. force killing...")
-        process1.terminate() # force kill...
-    process1.join()
-    print("process1 terminated.")
+    try:
+        p1.join(5)
+        p2.join(5)
+    finally:
+        # Clean up
+        shared_input_frame.close()
+        shared_input_frame.unlink()
+        shared_output_frame.close()
+        shared_output_frame.unlink()
+
+        if p1.is_alive():
+            print("process1 still alive. force killing...")
+            p1.terminate() # force kill...
+        p1.join()
+        print("process1 terminated.")
 
 
 if __name__ == "__main__":
