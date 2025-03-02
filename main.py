@@ -6,11 +6,9 @@ from multiprocessing import Process, Queue, get_context, shared_memory
 from multiprocessing.connection import Connection
 from typing import List, Literal, Dict, Optional
 import torch
-from PIL import Image, ImageDraw, ImageFont, ImageTk
+from PIL import Image, ImageDraw, ImageFont
 import io
 
-from transformers.image_transforms import NumpyToTensor
-from streamdiffusion.image_utils import pil2tensor
 
 from utils.shared_mem import create_shared_float, access_shared_float, cleanup_shared_float
 
@@ -20,10 +18,6 @@ import numpy as np
 from flask import Flask, Response, request
 from flask_socketio import SocketIO
 import base64
-from collections import deque
-import tkinter as tk
-import cv2
-import random
 
 
 
@@ -168,7 +162,17 @@ width: int, shared_frame_name):
             t, v, _, _ = ndi.recv_capture_v2(ndi_recv, 5000)
             if t == ndi.FRAME_TYPE_VIDEO:
                 frame = np.copy(v.data)
+
                 frame = frame[...,:3]
+                if(frame.shape != frame_shape):
+                    print("Frame shape mismatch")
+                    img = Image.fromarray(frame)
+
+                    # Resize image
+                    resized_img = img.resize((512, 512))
+
+                    # Convert back to numpy array
+                    frame = np.array(resized_img)
                 norm_frame = normalize(frame).astype('uint8')
                 shared_frame[:] = norm_frame[:]
                 ndi.recv_free_video_v2(ndi_recv, v)
@@ -358,8 +362,8 @@ def main(
     use_denoising_batch: bool = True,
     seed: int = 1,
     cfg_type: Literal["none", "full", "self", "initialize"] = "self",
-    guidance_scale: float = 1.3,
-    delta: float = .7,
+    guidance_scale: float = 1.4,
+    delta: float = .75,
     do_add_noise: bool = True,
     enable_similar_image_filter: bool = True,
     similar_image_filter_threshold: float = 0.99,
