@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <script
+            src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.2/p5.min.js"
+            integrity="sha512-1YMgn4j8cIL91s14ByDGmHtBU6+F8bWOMcF47S0cRO3QNm8SKPNexy4s3OCim9fABUtO++nJMtcpWbINWjMSzQ=="
+            crossorigin="anonymous"
+            referrerpolicy="no-referrer"
+        ></script>
+        <style>
+            body {
+                margin: 0;
+                padding: 0;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                background-color: #f0f0f0;
+            }
+            .feed-container {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+            }
+            img {
+                max-width: 100%;
+                height: auto;
+            }
+        </style>
+        <script src="https://cdn.jsdelivr.net/npm/dat.gui@0.7.9/build/dat.gui.min.js"></script>
+        <script src="/sketch.js"></script>
+        <script src="/ui.js"></script>
+        <title>p5 StreamDiffusion Demo</title>
+        <div class="feed-container">
+            <img
+                id="outputFeed"
+                src="http://127.0.0.1:5000/output_feed"
+                alt="Generated Output"
+            />
+        </div>
+    </head>
+    <body></body>
+</html>
