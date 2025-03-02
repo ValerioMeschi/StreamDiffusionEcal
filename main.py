@@ -11,6 +11,9 @@ import io
 
 from transformers.image_transforms import NumpyToTensor
 from streamdiffusion.image_utils import pil2tensor
+
+from utils.shared_mem import create_shared_float, access_shared_float, cleanup_shared_float
+
 import fire
 import NDIlib as ndi
 import numpy as np
@@ -20,6 +23,8 @@ import base64
 from collections import deque
 import tkinter as tk
 import cv2
+import random
+
 
 
 app = Flask(__name__)
@@ -36,8 +41,24 @@ use_ndi = False
 frame_shape = (512, 512, 3)
 frame_dtype = np.uint8
 
-sleep_time = 0.01
+#sleep time between frames
+sleep_time = 0.001
 
+def file_to_array(file):
+    # Read image from the uploaded file
+    img = Image.open(io.BytesIO(file.read()))
+
+    # Resize to 512x512
+    img = img.resize((512, 512))
+
+    # Convert to RGB if not already
+    if img.mode != 'RGB':
+        img = img.convert('RGB')
+
+    # Convert to numpy array and ensure uint8 type
+    img_array = np.array(img, dtype=np.uint8)
+
+    return img_array
 
 def tensor_to_rgb(tensor):
     # Convert to numpy and transpose dimensions to [H, W, C]
@@ -59,12 +80,7 @@ def write_text_to_image(image, text):
     return image
 
 
-# Empty image for no signal
-empty_image = write_text_to_image(Image.new('RGB', (512, 512), color='black'), "no signal")
-empty_io = io.BytesIO()
-empty_image.save(empty_io, format="JPEG")
-empty_io.seek(0)
-empty_bytes = empty_io.read()
+
 
 # methodes pour streamer les frame en sortie. A threader dans main
 def stream_frames(shared_name, convert=True):
@@ -82,11 +98,6 @@ def stream_frames(shared_name, convert=True):
                 b'Content-Type: image/jpeg\r\n\r\n' + img_bytes + b'\r\n')
 
         time.sleep(sleep_time)
-
-
-
-
-
 
 
 import re
@@ -170,7 +181,6 @@ width: int, shared_frame_name):
 
 
 def image_generation_process(
-    queue: Queue,
     fps_queue: Queue,
     close_queue: Queue,
     model_id_or_path: str,
@@ -191,10 +201,10 @@ def image_generation_process(
     similar_image_filter_threshold: float,
     similar_image_filter_max_skip_frame: float,
     prompt_queue : Queue,
-    inputs_queue: Queue,
-    seed_queue: Queue,
     shared_input_frame_name: str,
     shared_output_frame_name: str,
+    shared_delta_name: str,
+    shared_seed_name: str,
 ) -> None:
     """
     Process for generating images based on a prompt using a specified model.
@@ -279,42 +289,38 @@ def image_generation_process(
         delta=delta,
     )
 
-    event = threading.Event()
-
-    #start NDI thread if enabled
-
     shmIn = shared_memory.SharedMemory(name=shared_input_frame_name)
     shared_input_frame = np.ndarray(frame_shape, dtype=frame_dtype, buffer=shmIn.buf)
 
     shmOut = shared_memory.SharedMemory(name=shared_output_frame_name)
     shared_output_frame = np.ndarray(frame_shape, dtype=frame_dtype, buffer=shmOut.buf)
 
+    shared_delta_array, shm_delta = access_shared_float(shared_delta_name)
+
+    shared_seed_array, shm_seed = access_shared_float(shared_seed_name)
+
+
     time.sleep(2)
 
+    last_seed_arr = shared_seed_array[:]
+
     while True:
+
         try:
             if not close_queue.empty(): # closing check
                 break
 
             # Check if there's a new seed
-            if not seed_queue.empty():
-                new_seed = seed_queue.get(block=False)
-                print(f"Updating seed: {new_seed}")
-                seed = int(new_seed)  # Ensure it's an integer
-                # Create a new generator with the new seed
+            if shared_seed_array[0] != -1:
+                #print("newSeed !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+                seed = int(shared_seed_array[0])
                 new_generator = torch.Generator(device=stream.device).manual_seed(seed)
                 # Update the generator in the diffusion stream
                 stream.stream.generator = new_generator
-                # Optionally reinitialize the initial noise using the new generator
-                '''
-                stream.stream.init_noise = torch.randn(
-                    (stream.stream.batch_size, 4, stream.stream.latent_height, stream.stream.latent_width),
-                    generator=new_generator,
-                    device=stream.device,
-                    dtype=stream.dtype
-                )
-                '''
+                shared_seed_array[0] = -1
 
+            #update Delta
+            stream.stream.delta = shared_delta_array[0]
 
             # Check if there's a new prompt
             if not prompt_queue.empty():
@@ -352,10 +358,10 @@ def main(
     use_denoising_batch: bool = True,
     seed: int = 1,
     cfg_type: Literal["none", "full", "self", "initialize"] = "self",
-    guidance_scale: float = 1.4,
-    delta: float = 1,
-    do_add_noise: bool = False,
-    enable_similar_image_filter: bool = True,
+    guidance_scale: float = 1.3,
+    delta: float = .8,
+    do_add_noise: bool = True,
+    enable_similar_image_filter: bool = False,
     similar_image_filter_threshold: float = 0.99,
     similar_image_filter_max_skip_frame: float = 10,
 ) -> None:
@@ -363,22 +369,34 @@ def main(
     Main function to start the image generation and viewer processes.
     """
     ctx = get_context('spawn')
-    queue = ctx.Queue()
-    inputs_queue = ctx.Queue()
     prompt_queue = ctx.Queue()
     fps_queue = ctx.Queue()
     seed_queue = ctx.Queue()
     close_queue = Queue()
 
+
+    shared_delta_name = create_shared_float(delta)
+    shared_seed_name = create_shared_float(float(seed))
+
     in_frame = np.zeros(frame_shape, dtype=frame_dtype)
+
     shared_input_frame = shared_memory.SharedMemory(create=True, size=in_frame.nbytes)
     shared_output_frame = shared_memory.SharedMemory(create=True, size=in_frame.nbytes)
 
 
+    shared_output_frame_buffer = np.ndarray(frame_shape, dtype=frame_dtype, buffer=shared_output_frame.buf)
+    shared_input_frame_buffer = np.ndarray(frame_shape, dtype=frame_dtype, buffer=shared_input_frame.buf)
+
+    # Empty image for no signal
+    empty_image = write_text_to_image(Image.new('RGB', (512, 512), color='black'), "no signal")
+    empty_image_arr = np.array(empty_image, dtype=np.uint8)
+    # put the empty image in memory
+    shared_output_frame_buffer[:] = empty_image_arr[:]
+    shared_input_frame_buffer[:] = empty_image_arr[:]
+
     p1 = ctx.Process(
         target=image_generation_process,
         args=(
-            queue,
             fps_queue,
             close_queue,
             model_id_or_path,
@@ -399,10 +417,10 @@ def main(
             similar_image_filter_threshold,
             similar_image_filter_max_skip_frame,
             prompt_queue,
-            inputs_queue,
-            seed_queue,
             shared_input_frame.name,
             shared_output_frame.name,
+            shared_delta_name,
+            shared_seed_name,
             ),
     )
     p1.start()
@@ -416,19 +434,17 @@ def main(
         if data.startswith('data:image'):
             base64_data = data.split(',')[1]
             image_data = base64.b64decode(base64_data)
-            image = Image.open(io.BytesIO(image_data))
-            rgb = image.convert("RGB")
-            incoming_queue.put(pil2tensor(rgb))
+            imagefile =io.BytesIO(image_data)
+            new_frame = file_to_array(imagefile)
+            shared_input_frame_buffer[:] = new_frame[:]
             print("received")
 
     @app.route("/upload", methods=['POST'])
     def output_img():
         image_file = request.files['image']  # Get image from request
         if image_file:
-            image = Image.open(image_file)  # Convert to PIL Image
-            image = image.convert("RGB")
-            image = image.resize((512, 512))
-            incoming_queue.put(pil2tensor(image))
+            new_frame = file_to_array(image_file)
+            shared_input_frame_buffer[:] = new_frame[:]
             return {"status": "success"}
         else:
             return {"status": "error", "message": "No image received"}
@@ -456,10 +472,20 @@ def main(
         if "seed" in data:
             try:
                 new_seed = int(data["seed"])  # Ensure it's an integer
-                seed_queue.put(new_seed)  # Send new seed to the queue
+                shared_seed_arr, shm = access_shared_float(shared_seed_name)
+                shared_seed_arr[0] = new_seed
                 print(f"New seed: {new_seed}")
             except ValueError:
                 return jsonify({"error": "Invalid seed value"}), 400
+
+        if "delta" in data:
+            try:
+                new_delta = float(data["delta"])  # Ensure it's a float
+                shared_delta_arr, shm = access_shared_float(shared_delta_name)
+                shared_delta_arr[0] = new_delta
+                print(f"New delta: {new_delta}")
+            except ValueError:
+                return jsonify({"error": "Invalid delta value"}), 400
 
         return b"Parameters updated", 200  # Simple byte response
 
@@ -480,7 +506,8 @@ def main(
         shared_input_frame.unlink()
         shared_output_frame.close()
         shared_output_frame.unlink()
-
+        cleanup_shared_float(shared_delta_name)
+        cleanup_shared_float(shared_seed_name)
         if p1.is_alive():
             print("process1 still alive. force killing...")
             p1.terminate() # force kill...
