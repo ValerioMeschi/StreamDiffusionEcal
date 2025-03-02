@@ -97,7 +97,7 @@ def stream_frames(shared_name, convert=True):
         yield (b'--frame\r\n'
                 b'Content-Type: image/jpeg\r\n\r\n' + img_bytes + b'\r\n')
 
-        time.sleep(sleep_time)
+        time.sleep(1/60)
 
 
 import re
@@ -359,11 +359,11 @@ def main(
     seed: int = 1,
     cfg_type: Literal["none", "full", "self", "initialize"] = "self",
     guidance_scale: float = 1.3,
-    delta: float = .8,
+    delta: float = .7,
     do_add_noise: bool = True,
-    enable_similar_image_filter: bool = False,
+    enable_similar_image_filter: bool = True,
     similar_image_filter_threshold: float = 0.99,
-    similar_image_filter_max_skip_frame: float = 10,
+    similar_image_filter_max_skip_frame: float = 5,
 ) -> None:
     """
     Main function to start the image generation and viewer processes.
