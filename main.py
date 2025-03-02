@@ -321,21 +321,17 @@ def image_generation_process(
                 newPrompt = prompt_queue.get(block=False)
                 stream.stream.update_prompt(newPrompt)
 
-            # Check for new frames to process
+            # Get input frame from shared memory and preprocess it
             new_frame = shared_input_frame.copy()
-            #pil_image = Image.fromarray(new_frame, 'RGB')
             tensor = torch.as_tensor(new_frame).permute(2, 0, 1)
             tensor = tensor.float() / 255.0
             input_batch = torch.cat([tensor])
             output_image = stream.stream(input_batch.to(device=stream.device, dtype=stream.dtype)).cpu()
-            queue.put(output_image, block=False)
-
+            #process output and write to shared memory
             pp = postprocess_image(output_image, output_type="pt")[0]
             out_frame = tensor_to_rgb(pp);
-
             shared_output_frame[:] = out_frame[:]
-            #out_frame = out_frame.astype('uint8')
-            #print(out_frame.shape)
+
 
             time.sleep(sleep_time)
         except KeyboardInterrupt:
@@ -425,11 +421,6 @@ def main(
             incoming_queue.put(pil2tensor(rgb))
             print("received")
 
-    @app.route('/output_feed')
-    def output_feed():
-        """ Flask route for MJPEG video streaming. """
-        return Response(stream_frames(shared_output_frame.name), mimetype='multipart/x-mixed-replace; boundary=frame')
-
     @app.route("/upload", methods=['POST'])
     def output_img():
         image_file = request.files['image']  # Get image from request
@@ -442,10 +433,16 @@ def main(
         else:
             return {"status": "error", "message": "No image received"}
 
+    @app.route('/output_feed')
+    def output_feed():
+        """ Flask route for MJPEG video streaming. """
+        return Response(stream_frames(shared_output_frame.name), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+
     @app.route('/input_feed')
     def input_feed():
         """ Flask route for MJPEG video streaming. """
-        return Response(stream_frames(inputs_queue), mimetype='multipart/x-mixed-replace; boundary=frame')
+        return Response(stream_frames(shared_input_frame.name), mimetype='multipart/x-mixed-replace; boundary=frame')
 
     @app.route('/set_params', methods=['POST'])
     def set_params():
