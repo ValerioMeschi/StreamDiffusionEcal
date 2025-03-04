@@ -36,7 +36,7 @@ frame_shape = (512, 512, 3)
 frame_dtype = np.uint8
 
 #sleep time between frames
-sleep_time = 0.001
+sleep_time = 0.01
 
 def file_to_array(file):
     # Read image from the uploaded file
@@ -91,7 +91,7 @@ def stream_frames(shared_name, convert=True):
         yield (b'--frame\r\n'
                 b'Content-Type: image/jpeg\r\n\r\n' + img_bytes + b'\r\n')
 
-        time.sleep(1/60)
+        time.sleep(1/100)
 
 
 import re
@@ -164,6 +164,8 @@ width: int, shared_frame_name):
                 frame = np.copy(v.data)
 
                 frame = frame[...,:3]
+                # fix mismatched color on ndi
+                frame = frame[:, :, [2, 1, 0]]
                 if(frame.shape != frame_shape):
                     print("Frame shape mismatch")
                     img = Image.fromarray(frame)
@@ -379,8 +381,8 @@ def main(
     close_queue = Queue()
 
 
-    shared_delta_name = create_shared_float(delta)
-    shared_seed_name = create_shared_float(float(seed))
+    shared_delta_name, shared_delta_shm = create_shared_float(delta)
+    shared_seed_name, shared_seed_shm = create_shared_float(float(seed))
 
     in_frame = np.zeros(frame_shape, dtype=frame_dtype)
 

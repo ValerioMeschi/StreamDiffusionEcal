@@ -13,7 +13,7 @@ def create_shared_float(initial_value=0.0):
     shared_arr = np.ndarray(arr.shape, dtype=arr.dtype, buffer=shm.buf)
     shared_arr[:] = arr[:]  # Copy the initial value
 
-    return shm.name
+    return shm.name, shm
 
 # Access the shared float
 def access_shared_float(shm_name):
